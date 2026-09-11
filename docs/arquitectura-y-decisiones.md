@@ -22,7 +22,7 @@ flowchart LR
     end
 
     subgraph "Generación visual"
-        D[Nano Banana\nGemini 2.5 Flash Image]
+        D[Nano Banana 2 Lite\ngemini-3.1-flash-lite-image]
     end
 
     subgraph Salida
@@ -92,9 +92,9 @@ Alternativa sin facturación: Ollama local (qwen2.5:7b) vía el nodo Ollama Chat
 
 ### Generación de imagen
 
-**Decisión confirmada: Nano Banana (Gemini 2.5 Flash Image)**, vía HTTP Request a la API de Google (no hay nodo nativo en n8n, así que se monta como HTTP Request con la API key de Google AI Studio).
+**Decisión confirmada: Nano Banana 2 Lite (`gemini-3.1-flash-lite-image`)**, vía HTTP Request a la API de Google (no hay nodo nativo en n8n, así que se monta como HTTP Request con la API key de Google AI Studio como credencial Header Auth). El modelo original, `gemini-2.5-flash-image`, pasó a estado legacy — Google recomienda migrar a esta versión, más rápida y barata.
 
-La capa gratuita de AI Studio permite del orden de **500 imágenes/día sin necesidad de tarjeta de crédito**, más que de sobra para desarrollo, pruebas y la grabación del vídeo. Coste con facturación activada: ~0,039 $/imagen (la mitad vía Batch API).
+**Corrección sobre el nivel gratuito (verificado en producción):** al construir el flujo, la llamada real a la API devolvía sistemáticamente `429 RESOURCE_EXHAUSTED` con `limit: 0` para el modelo de generación de imagen, en ambos modelos probados — es decir, la cuota gratuita para *generar imágenes* con Gemini es 0 en un proyecto sin facturación vinculada, a diferencia de lo que sugiere la documentación general de AI Studio (pensada sobre todo para los modelos de texto). La solución fue activar la facturación en el proyecto de Google Cloud asociado a la API key ("n8n-connection"); a partir de ahí las llamadas funcionan con normalidad. Coste real: ~0,039 $/imagen (la mitad vía Batch API) — para este proyecto, un puñado de céntimos.
 
 Importante: descarga la imagen generada dentro del flujo (el nodo HTTP Request debe traer el binario, no solo la URL/base64 en crudo) para reenviarla como adjunto real a Telegram, no como un enlace. Gemini devuelve la imagen como base64 dentro de la respuesta JSON, así que un paso posterior decodifica ese base64 a un binario real de n8n antes de enviarlo a Telegram.
 
@@ -162,7 +162,7 @@ Un commit por cada iteración relevante del flujo da además un historial de dec
 | Disparador (programado / manual / webhook) | Schedule Trigger + Manual Trigger |
 | HTTP Request de noticias reales (RSS/API) | RSS Feed Read — Xataka (Inteligencia Artificial) |
 | IA: resumir, adaptar tono, redactar prompt de imagen | AI Agent (Claude API) + Structured Output Parser |
-| Generación de imagen | Nano Banana (Gemini 2.5 Flash Image) |
+| Generación de imagen | Nano Banana 2 Lite (gemini-3.1-flash-lite-image) |
 | Canal de salida con resumen + imagen | Telegram (bot dedicado) |
 | Blueprint + explicación + sticky notes | Export JSON + README + sticky notes en el canvas de n8n, versionados en GitHub |
 | Gestor de errores (si aplica) | Error Trigger workflow con notificación |
@@ -201,7 +201,7 @@ Los cinco bloques (cuentas y credenciales externas, recursos de datos, configura
 | Decisión | Elección | Estado |
 |---|---|---|
 | LLM de procesamiento | Claude (Anthropic API, vía Claude Console — no la suscripción Pro) | ✅ Confirmada |
-| API de imagen | Nano Banana (Gemini 2.5 Flash Image) | ✅ Confirmada |
+| API de imagen | Nano Banana 2 Lite (gemini-3.1-flash-lite-image) | ✅ Confirmada |
 | Canal de salida | Telegram, bot dedicado + grupo propio (no DM personal) | ✅ Confirmada |
 | Medio de noticias | Xataka — RSS "Inteligencia Artificial" | ✅ Confirmada |
 | Log / deduplicación | Google Sheets (OAuth2, cuenta personal) | ✅ Confirmada |
@@ -288,7 +288,7 @@ Notas de diseño: el `prompt_imagen` se pide en inglés porque los modelos de ge
 | Anthropic — API key | Generada en Claude Console, guardada como credencial en n8n (id: `xm5RKp4qI3NFTtbd`, nombre "Anthropic account") |
 | Google Sheets — credencial OAuth2 | Ya existente en n8n, reutilizada de otros flujos (id: `gHAPDOZ8wvBZu0mg`, nombre "Google Sheets account") |
 | n8n — API Key para Claude Code | Generada y vigente (uso bloqueado por Cloudflare Access en el hostname público; se usó `docker exec` como alternativa) |
-| Nano Banana — API key de Gemini | Generada en Google AI Studio, guardada como credencial Header Auth en n8n |
+| Nano Banana 2 Lite — API key de Gemini | Generada en Google AI Studio, proyecto "n8n-connection" con facturación activada (la cuota gratuita para generación de imagen es 0), guardada como credencial Header Auth en n8n |
 | Google Sheet del log — ID / URL | "Log de Noticias" — ID `18h4I3BsqjcCKRxrsStSF8eHXw2xUN8aMc9Q2RucqKVs`, pestaña gid=0 — [enlace](https://docs.google.com/spreadsheets/d/18h4I3BsqjcCKRxrsStSF8eHXw2xUN8aMc9Q2RucqKVs/edit?gid=0). Cabeceras ya pegadas en la fila 1 (A:J). |
 | Repositorio de GitHub | [cesscluvever/AgenciadeNoticias](https://github.com/cesscluvever/AgenciadeNoticias/tree/main) — README.md, workflow/, docs/ y media/ ya montados |
 | Credenciales en n8n | Anthropic, Telegram y Google Sheets OAuth2 creadas y verificadas — todas en estado "conectado" |
