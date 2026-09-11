@@ -12,17 +12,15 @@ Dos entradas en paralelo hacia el mismo flujo:
 
 **RSS Feed Read**: lee el feed de Xataka - Inteligencia Artificial (ya pre-filtrado por tema, no hace falta nodo Filter).
 
-**Limit**: el RSS devuelve todos los items en cada ejecución; este nodo se queda solo con el más reciente (1 item, "first items").
+**Limit a 6 (más recientes)**: el RSS devuelve todos los items en cada ejecución (~20); este nodo acota a un máximo de 6 candidatos por ejecución — un tope de seguridad para que un día con mucha actividad no dispare de golpe 20 llamadas de pago, sin limitarse a procesar solo 1 artículo nuevo por ejecución.
 
-## Deduplicación
+## Deduplicación (soporta varios artículos nuevos por ejecución)
 
-**Buscar en el Log**: busca en la Google Sheet "Log de Noticias" una fila cuyo link coincida con el artículo actual. "Always Output Data" activado para que, si no hay coincidencia, el IF reciba igualmente un item (vacío) y pueda decidir.
+**Leer Log Completo**: lee todas las filas de la Google Sheet "Log de Noticias" una sola vez por ejecución (sin filtro), en paralelo a la ingesta del RSS.
 
-**¿Ya procesada?**: si el link ya existe en el log, el flujo termina (rama verdadera → Fin) sin gastar llamadas de pago (Claude, Nano Banana). Si no existe, continúa.
+**Filtrar Noticias Nuevas**: Code node que cruza los hasta 6 candidatos del RSS contra los links ya existentes en el log y deja pasar solo los que aún no se han procesado, sin gastar llamadas de pago (Claude, Nano Banana) en los que ya están. Si los 6 ya están procesados, no pasa ningún item y el flujo termina ahí de forma natural — sin necesidad de un IF ni un nodo de fin explícito, porque un Code node que filtra hasta dejar 0 items ya detiene la rama por sí mismo.
 
-## Fin - Ya procesada
-
-Nodo No Operation: marca visualmente el punto donde termina la rama de artículos ya procesados. No hace nada más.
+*(Diseño anterior, sustituido): un Get Row(s) + IF por artículo funcionaba con 1 candidato, pero con varios en paralelo perdía en silencio los que no coincidían con el log — de ahí el cambio a leer el log completo una vez y filtrar en bloque.)*
 
 ## Procesamiento IA
 

@@ -57,6 +57,12 @@ flowchart LR
 
 Todo el flujo vive en la instancia n8n ya montada; GitHub no ejecuta nada, es el repositorio donde se versiona el blueprint y la documentación del entregable.
 
+**Actualización tras la puesta en producción — soporte para varios artículos nuevos por ejecución:** el diagrama de arriba y el diseño inicial asumían un único artículo por ejecución ("Limit: 1 ítem, el más reciente" + un Get Row(s)/IF por artículo). En el uso real, con un disparo diario, es habitual que se publique más de un artículo nuevo entre una ejecución y la siguiente — con el diseño de 1 ítem, los artículos adicionales se perdían en silencio (nunca se procesaban ni se registraban). El diseño final soporta varios artículos nuevos por ejecución:
+
+- **Limit** se sube a un tope de seguridad de **6** artículos por ejecución (en vez de 1), para acotar el gasto en un día con mucha actividad sin limitarse a procesar solo el más reciente.
+- La deduplicación por artículo individual (Get Row(s) + IF) se sustituye por **Leer Log Completo** (lee toda la hoja una vez, en paralelo al RSS) + **Filtrar Noticias Nuevas** (un Code node que cruza en bloque los candidatos contra los links ya registrados). El patrón anterior funcionaba con 1 candidato, pero con varios en paralelo perdía silenciosamente los que no coincidían con el log — de ahí el cambio.
+- El nodo de Telegram lleva activado **Retry On Fail** (3 reintentos): con varias imágenes en la misma ejecución, una desconexión transitoria subiendo una foto no debe tirar abajo todo el envío.
+
 ## 2. Componentes y justificación
 
 ### Orquestación: n8n (autoalojado)

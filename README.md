@@ -5,11 +5,11 @@ Agente n8n que vigila el feed de IA de Xataka, genera con Claude un resumen edit
 ## Qué hace el flujo
 
 1. **Disparo**: Schedule Trigger (diario, 08:00) y Manual Trigger en paralelo, ambos hacia el mismo pipeline.
-2. **Ingesta**: RSS Feed Read sobre el feed de Xataka — Inteligencia Artificial, seguido de un Limit a 1 ítem (el más reciente).
-3. **Deduplicación**: Google Sheets "Get Row(s)" comprueba si el link del artículo ya está en el log ("Log de Noticias"). Si ya existe, el flujo termina ahí sin gastar llamadas de pago; si no, continúa.
-4. **Procesamiento IA**: un AI Agent (Anthropic Chat Model + Structured Output Parser, "Require Specific Output Format" activado) convierte el artículo en un JSON con `resumen`, `tono` y `prompt_imagen`.
+2. **Ingesta**: RSS Feed Read sobre el feed de Xataka — Inteligencia Artificial, seguido de un Limit a 6 ítems como tope de seguridad (el feed devuelve ~20 items en cada ejecución).
+3. **Deduplicación (multi-artículo)**: "Leer Log Completo" lee toda la hoja "Log de Noticias" una vez por ejecución; un Code node ("Filtrar Noticias Nuevas") cruza en bloque los hasta 6 candidatos contra los links ya registrados y deja pasar solo los genuinamente nuevos — soporta procesar varios artículos nuevos en la misma ejecución (p. ej. si se publicó más de uno desde la última vez), no solo el más reciente.
+4. **Procesamiento IA**: un AI Agent (Anthropic Chat Model + Structured Output Parser, "Require Specific Output Format" activado) convierte cada artículo en un JSON con `resumen`, `tono` y `prompt_imagen`.
 5. **Generación de imagen**: HTTP Request a la API de Gemini (Nano Banana 2 Lite, `gemini-3.1-flash-lite-image`) con el `prompt_imagen`; un Code node decodifica la imagen (viene en base64 dentro del JSON) a un binario real de n8n.
-6. **Salida**: Telegram — Send Photo, con la imagen como adjunto real (no un enlace) y el resumen como caption.
+6. **Salida**: Telegram — Send Photo, con la imagen como adjunto real (no un enlace) y el resumen como caption. Con reintentos automáticos activados, porque subir varias fotos en la misma ejecución puede tener algún corte de conexión transitorio.
 7. **Registro**: tras el envío correcto, se añade una fila al log de Google Sheets con las 10 columnas (link, título, fechas, resumen, tono, prompt_imagen, imagen, estado, canal_destino).
 8. **Gestión de errores**: un workflow secundario (`workflow/news-reporter-errors.json`) con un Error Trigger, enganchado como *Error Workflow* del flujo principal, notifica por Telegram el nombre del workflow, el nodo que falló y el mensaje de error.
 
@@ -21,7 +21,7 @@ Cada nodo del canvas tiene una sticky note explicando su función — ver la tra
 - **LLM de procesamiento**: Claude (Anthropic API vía Claude Console, no la suscripción Pro), con Structured Output Parser para forzar el JSON de salida.
 - **Generación de imagen**: Nano Banana 2 Lite (`gemini-3.1-flash-lite-image`, el reemplazo recomendado por Google del `gemini-2.5-flash-image` original) vía HTTP Request, ya que no existe nodo nativo en n8n. **Importante**: la cuota gratuita de Gemini para *generación de imagen* es 0 sin facturación vinculada al proyecto de Google Cloud — hubo que activarla para que el flujo funcionase (coste real: céntimos de dólar).
 - **Canal de salida**: Telegram con un bot y grupo dedicados (no un DM personal), para simular el canal de distribución de un equipo editorial.
-- **Deduplicación y log**: Google Sheets, filtrando por columna `link` antes de gastar ninguna llamada de pago — así un artículo ya procesado no vuelve a consumir tokens de Claude ni cuota de Gemini.
+- **Deduplicación y log**: Google Sheets, cruzando el log completo contra los candidatos del RSS antes de gastar ninguna llamada de pago — así un artículo ya procesado no vuelve a consumir tokens de Claude ni cuota de Gemini, y el flujo procesa correctamente varios artículos nuevos en la misma ejecución (no solo el más reciente).
 - **Orquestación**: n8n autoalojado en Docker, ya en marcha (Cloudflare Tunnel + Access). El flujo se construyó con la CLI de n8n vía `docker exec` en lugar de su API REST pública, porque Cloudflare Access protege todo `n8n.cesscluv.com` salvo `/webhook*` y bloquea las llamadas REST externas incluso con API key.
 - **Gestor de errores**: workflow secundario con Error Trigger, mismo canal de salida (Telegram), sin añadir complejidad al flujo principal.
 
