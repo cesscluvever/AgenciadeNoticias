@@ -4,7 +4,6 @@ Propuesta de stack para el caso práctico del máster (EBIS), adaptada al entorn
 
 ## 1. Arquitectura general
 
-```mermaid
 flowchart LR
     subgraph Disparo
         A1[Schedule Trigger\ncron diario]
