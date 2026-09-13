@@ -4,6 +4,7 @@ Propuesta de stack para el caso práctico del máster (EBIS), adaptada al entorn
 
 ## 1. Arquitectura general
 
+```mermaid
 flowchart LR
     subgraph Disparo
         A1[Schedule Trigger\ncron diario]
@@ -12,7 +13,7 @@ flowchart LR
 
     subgraph Ingesta
         B[RSS Feed Read\nXataka — Inteligencia Artificial]
-        B2[Limit: 6 ítems\ más recientes]
+        B2[Limit: 6 ítems\nmás recientes]
     end
 
     subgraph "Procesamiento IA"
@@ -37,6 +38,22 @@ flowchart LR
     subgraph Errores
         F[Error Trigger\nnotificación de fallo]
     end
+
+    A1 --> B
+    A2 --> B
+    B --> B2
+    B2 --> G1
+    G1 --> G2
+    G2 -- Sí --> H[Fin: ya procesada]
+    G2 -- No --> C1
+    C1 --> C2
+    C2 --> D
+    D --> E
+    E --> G3
+    B -. error .-> F
+    C1 -. error .-> F
+    D -. error .-> F
+```
 
 
 Todo el flujo vive en la instancia n8n ya montada; GitHub no ejecuta nada, es el repositorio donde se versiona el blueprint y la documentación del entregable.
