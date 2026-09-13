@@ -30,7 +30,7 @@ flowchart LR
     end
 
     subgraph "Deduplicación y log"
-        G1[Google Sheets\nGet Row(s): filtrar por link]
+        G1["Google Sheets\nGet Row(s): filtrar por link"]
         G2{¿Ya está\nen el log?}
         G3[Google Sheets\nAppend Row]
     end
