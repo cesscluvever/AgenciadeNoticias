@@ -28,7 +28,7 @@ Dos entradas en paralelo hacia el mismo flujo:
 
 ## Generación de imagen
 
-**Nano Banana - Generar Imagen**: llama a la API de Gemini 2.5 Flash Image con el prompt_imagen generado.Gemino devuelve la imagen en base64 (formato texto) al nodo siguiente dentro del JSON.
+**Nano Banana - Generar Imagen**: llama a la API de Gemini 2.5 Flash Image con el prompt_imagen generado. Gemini devuelve la imagen en base64 (formato texto) al nodo siguiente dentro del JSON.
 
 **Decodificar Imagen a Binario**: Este Code node recibe la imagen en base64 y la convierte en un binario real de n8n para poder adjuntarla. De esta manera podrá ser enviada como formato png a Telegram y, por tanto, como imagen real, junto al texto del resumen.
 
