@@ -4,7 +4,6 @@ Propuesta de stack para el caso práctico del máster (EBIS), adaptada al entorn
 
 ## 1. Arquitectura general
 
-
 ```mermaid
 flowchart LR
     subgraph Disparo
@@ -55,7 +54,6 @@ flowchart LR
     C1 -. error .-> F
     D -. error .-> F
 ```
-
 
 Todo el flujo vive en la instancia n8n ya montada; GitHub no ejecuta nada, es el repositorio donde se versiona el blueprint y la documentación del entregable.
 
