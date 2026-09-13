@@ -3,7 +3,7 @@
 Propuesta de stack para el caso práctico del máster (EBIS), adaptada al entorno de Jose: n8n autoalojado en Docker (n8n.cesscluv.com vía túnel de Cloudflare), contenedor Ollama con qwen2.5:7b, y GitHub como repositorio del entregable. Ollama ha sido reemplazado en esta solución por soluciones IA en Cloud.
 
 ## 1. Arquitectura general
-
+'''
 flowchart LR
     subgraph Disparo
         A1[Schedule Trigger\ncron diario]
