@@ -16,9 +16,13 @@ flowchart LR
         B2[Limit: 6 ítems\nmás recientes]
     end
 
+    subgraph "Deduplicación (en bloque)"
+        G1["Leer Log Completo\nGoogle Sheets: toda la hoja, sin filtro"]
+        G2["Filtrar Noticias Nuevas\nCode: cruza candidatos vs. log ya registrado"]
+    end
+
     subgraph "Procesamiento IA"
-        C1[Claude API: resumen + tono]
-        C2[Claude API: prompt de imagen]
+        C1["AI Agent (Claude)\nresumen + tono + prompt_imagen en una llamada"]
     end
 
     subgraph "Generación visual"
@@ -29,10 +33,9 @@ flowchart LR
         E[Telegram\nbot + grupo dedicado]
     end
 
-    subgraph "Deduplicación y log"
-        G1["Google Sheets\nGet Row(s): filtrar por link"]
-        G2{¿Ya está\nen el log?}
-        G3[Google Sheets\nAppend Row]
+    subgraph Log
+        G3[Preparar Fila del Log]
+        G4[Google Sheets\nAppend Row]
     end
 
     subgraph Errores
@@ -40,16 +43,18 @@ flowchart LR
     end
 
     A1 --> B
+    A1 --> G1
     A2 --> B
+    A2 --> G1
     B --> B2
-    B2 --> G1
+    B2 --> G2
     G1 --> G2
-    G2 -- Sí --> H[Fin: ya procesada]
-    G2 -- No --> C1
-    C1 --> C2
-    C2 --> D
+    G2 -- "sin novedades" --> H[Fin: nada nuevo]
+    G2 -- "artículo(s) nuevo(s)" --> C1
+    C1 --> D
     D --> E
     E --> G3
+    G3 --> G4
     B -. error .-> F
     C1 -. error .-> F
     D -. error .-> F
@@ -57,7 +62,7 @@ flowchart LR
 
 Todo el flujo vive en la instancia n8n ya montada; GitHub no ejecuta nada, es el repositorio donde se versiona el blueprint y la documentación del entregable.
 
-**Actualización tras la puesta en producción — soporte para varios artículos nuevos por ejecución:** el diseño inicial asumía un único artículo por ejecución ("Limit: 1 ítem, el más reciente" + un Get Row(s)/IF por artículo). En el uso real, con un disparo diario, es habitual que se publique más de un artículo nuevo entre una ejecución y la siguiente — con el diseño de 1 ítem, los artículos adicionales se perdían sin registro. El diseño final soporta varios artículos nuevos (máximo 6) por ejecución:
+**Nota de evolución de diseño — soporte para varios artículos nuevos por ejecución:** el diagrama anterior ya refleja el diseño final. La primera versión asumía un único artículo por ejecución ("Limit: 1 ítem, el más reciente" + un Get Row(s)/IF por artículo). En el uso real, con un disparo diario, es habitual que se publique más de un artículo nuevo entre una ejecución y la siguiente — con el diseño de 1 ítem, los artículos adicionales se perdían sin registro. Por eso el diseño final soporta varios artículos nuevos (máximo 6) por ejecución:
 
 - **Limit** se sube a un tope de seguridad de **6** artículos por ejecución (en vez de 1), para acotar el gasto en un día con mucha actividad sin limitarse a procesar solo el más reciente.
 - La deduplicación por artículo individual (Get Row(s) + IF) se sustituye por **Leer Log Completo** (lee toda la hoja una vez, en paralelo al RSS) + **Filtrar Noticias Nuevas** (un Code node que cruza en bloque los candidatos contra los links ya registrados). El patrón anterior funcionaba con 1 candidato, pero con varios en paralelo perdía silenciosamente los que no coincidían con el log — de ahí el cambio.
@@ -85,12 +90,14 @@ Como el nodo RSS Feed Read devuelve **todos** los ítems del feed en cada ejecuc
 
 Sin API key, sin autenticación — el nodo solo necesita la URL, lo que reduce puntos de fallo de cara a la demo.
 
-### Procesamiento IA: dos pasos encadenados
+### Procesamiento IA: una llamada con salida estructurada
 
-1. **Resumen + adaptación de tono** (informativo, cercano, divulgativo) sobre el artículo del RSS.
-2. **Redacción del prompt de imagen** a partir del resumen generado.
+Un único **AI Agent** (Claude vía Anthropic Chat Model + Structured Output Parser) genera en una sola llamada los tres campos que necesita el resto del flujo:
 
-**Decisión confirmada: Claude (Anthropic) vía API**, con Structured Output Parser (JSON con resumen, tono, prompt_imagen).
+1. **resumen** + **tono** (informativo, cercano, divulgativo) sobre el artículo del RSS.
+2. **prompt_imagen**, redactado a partir del mismo contexto, en la misma respuesta.
+
+**Decisión confirmada: Claude (Anthropic) vía API**, con Structured Output Parser (JSON con resumen, tono, prompt_imagen) y "Require Specific Output Format" activado — evita depender de dos llamadas encadenadas (más coste y más puntos de fallo) para un resultado que cabe en un único JSON.
 
 ⚠️ **Importante sobre la suscripción Claude Pro:** no sirve para esto — son dos productos distintos. Claude Pro da acceso a Claude en claude.ai (web, escritorio, móvil). El nodo Anthropic de n8n necesita una **API key de la Claude Console** (console.anthropic.com), la plataforma de desarrolladores, que se factura aparte por tokens consumidos. El coste real para este proyecto es prácticamente irrelevante: cada ejecución mueve un par de miles de tokens, del orden de céntimos de dólar incluso con Sonnet.
 
@@ -135,7 +142,7 @@ Columnas:
 | estado | enviado / error |
 | canal_destino | Telegram (por si en el futuro se añaden más canales) |
 
-Mecánica en el flujo (ya reflejada en el diagrama): justo después del Limit, un nodo **Get Row(s)** con filtro `link = {{ $json.link }}` comprueba si el artículo ya está en el log. Si hay coincidencia, el flujo termina ahí (rama "Fin: ya procesada") sin gastar llamadas de Claude ni de Nano Banana — esto es importante porque el filtrado ocurre *antes* de las llamadas a las APIs de pago, no después. Si no hay coincidencia, el flujo sigue el camino normal y, tras el envío correcto a Telegram, un nodo **Append Row** añade la fila nueva al log.
+Mecánica en el flujo (ya reflejada en el diagrama): en paralelo a la ingesta del RSS, un nodo **Leer Log Completo** lee toda la hoja del log una sola vez por ejecución (sin filtro). Un Code node, **Filtrar Noticias Nuevas**, cruza en bloque los hasta 6 candidatos del RSS contra los links ya registrados en el log y deja pasar solo los genuinamente nuevos — si los 6 ya están procesados, no pasa ningún ítem y el flujo termina ahí de forma natural, sin gastar llamadas de Claude ni de Nano Banana. Esto es importante porque el filtrado ocurre *antes* de las llamadas a las APIs de pago, no después, y además soporta varios artículos nuevos en la misma ejecución (no solo el más reciente). Si hay artículos nuevos, el flujo sigue el camino normal y, tras el envío correcto a Telegram, un nodo **Preparar Fila del Log** construye la fila y **Google Sheets - Añadir al Log** la añade al histórico.
 
 Credencial: **OAuth2 de Google Sheets** conectando la cuenta personal de Gmail — es la vía más simple para un proyecto individual (frente a una cuenta de servicio, que tiene sentido en un entorno de equipo/producción pero es una capa de configuración innecesaria aquí).
 
