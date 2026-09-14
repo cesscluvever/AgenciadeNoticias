@@ -1,1 +1,661 @@
-[{"updatedAt":"2026-09-11T16:29:08.000Z","createdAt":"2026-09-11T14:27:29.376Z","id":"newsReporterMain1","name":"News Reporter","description":null,"active":true,"isArchived":false,"nodes":[{"id":"trigger_schedule","name":"Schedule Trigger","type":"n8n-nodes-base.scheduleTrigger","typeVersion":1.3,"position":[-200,140],"parameters":{"rule":{"interval":[{"field":"days","triggerAtHour":8,"triggerAtMinute":0}]}}},{"id":"trigger_manual","name":"Manual Trigger","type":"n8n-nodes-base.manualTrigger","typeVersion":1,"position":[-200,420],"parameters":{}},{"id":"rss_read","name":"RSS Feed Read","type":"n8n-nodes-base.rssFeedRead","typeVersion":1.2,"position":[60,280],"parameters":{"url":"https://www.xataka.com/tag/inteligencia-artificial/rss2.xml"}},{"id":"limit_6","name":"Limit a 6 (mas recientes)","type":"n8n-nodes-base.limit","typeVersion":1,"position":[300,220],"parameters":{"maxItems":6,"keep":"firstItems"}},{"id":"sheets_get_all_log","name":"Leer Log Completo","type":"n8n-nodes-base.googleSheets","typeVersion":4.7,"position":[300,460],"parameters":{"authentication":"oAuth2","resource":"sheet","operation":"read","documentId":{"__rl":true,"mode":"id","value":"18h4I3BsqjcCKRxrsStSF8eHXw2xUN8aMc9Q2RucqKVs"},"sheetName":{"__rl":true,"mode":"id","value":"0"},"filtersUI":{},"options":{}},"credentials":{"googleSheetsOAuth2Api":{"id":"gHAPDOZ8wvBZu0mg","name":"Google Sheets account"}}},{"id":"code_filter_new","name":"Filtrar Noticias Nuevas","type":"n8n-nodes-base.code","typeVersion":2,"position":[560,280],"parameters":{"mode":"runOnceForAllItems","language":"javaScript","jsCode":"const allItems = $input.all();\nconst logRows = allItems.filter((i) => Object.prototype.hasOwnProperty.call(i.json, 'estado'));\nconst candidates = allItems.filter((i) => !Object.prototype.hasOwnProperty.call(i.json, 'estado'));\nconst existingLinks = new Set(logRows.map((i) => i.json.link));\nreturn candidates.filter((i) => !existingLinks.has(i.json.link));"}},{"id":"ai_agent","name":"AI Agent","type":"@n8n/n8n-nodes-langchain.agent","typeVersion":3.1,"position":[1020,120],"parameters":{"promptType":"define","text":"=Titular: {{ $('RSS Feed Read').item.json.title }}\n\nFecha de publicación: {{ $('RSS Feed Read').item.json.pubDate }}\n\nEnlace original: {{ $('RSS Feed Read').item.json.link }}\n\nContenido:\n\n{{ $('RSS Feed Read').item.json.contentSnippet || $('RSS Feed Read').item.json.content }}","hasOutputParser":true,"options":{"systemMessage":"Eres el redactor de IA del equipo de contenidos de un medio digital español especializado en innovación, tecnología y negocios. Tu trabajo es convertir un artículo de prensa real en una pieza breve, lista para publicar en el canal de distribución interno del equipo.\n\nRecibirás el titular, la fecha de publicación, el enlace y el contenido (puede incluir HTML) de una noticia real. A partir de ese material, y solo de ese material, genera tres elementos:\n\n1. \"resumen\": un resumen de la noticia en español, entre 60 y 100 palabras, en 3-4 frases. Debe:\n\n   - Recoger los hechos y datos concretos del artículo original (cifras, nombres, fechas) sin inventar ni añadir información que no esté en el texto fuente.\n\n   - Tener un tono informativo, cercano y divulgativo: explica cualquier término técnico en cuanto aparece, evita la jerga innecesaria, usa un lenguaje directo, y una frase de apertura que enganche sin caer en el sensacionalismo o el titular clickbait.\n\n   - Ser una reescritura en tus propias palabras, nunca una copia ni una paráfrasis mecánica del texto original.\n\n2. \"tono\": una etiqueta corta (una frase) que describa el registro aplicado en el resumen — por ejemplo \"informativo, cercano y divulgativo\", o una variación si el contenido lo pide (más técnico si la noticia es muy especializada, siempre dentro de un registro accesible). Este campo es para trazabilidad interna, no forma parte del texto publicado.\n\n3. \"prompt_imagen\": un prompt en inglés, de entre 30 y 60 palabras, para un modelo de generación de imágenes (Nano Banana / Gemini 2.5 Flash Image), que describa una escena o composición ilustrativa relacionada con el contenido del resumen. Reglas:\n\n   - Describe una escena, objeto o metáfora visual concreta — no una lista de palabras sueltas.\n\n   - No incluyas texto, logotipos, marcas registradas, ni la reproducción de personas reales identificables (ni sus nombres) en la descripción.\n\n   - Especifica un estilo visual editorial (por ejemplo \"editorial illustration\", \"photorealistic tech photography\", \"flat design infographic style\" — elige el que mejor encaje con la noticia) y evita pedir texto superpuesto en la imagen, porque los modelos de imagen no lo renderizan bien.\n\nSi el contenido del artículo es muy breve o incompleto, genera el mejor resumen posible con la información disponible. Nunca inventes datos, cifras o declaraciones que no estén en el texto fuente.\n\nDevuelve EXCLUSIVAMENTE un objeto JSON válido con esta forma exacta, sin texto adicional antes o después, sin bloques de código markdown:\n\n{\n\n  \"resumen\": \"...\",\n\n  \"tono\": \"...\",\n\n  \"prompt_imagen\": \"...\"\n\n}"}}},{"id":"anthropic_model","name":"Anthropic Chat Model","type":"@n8n/n8n-nodes-langchain.lmChatAnthropic","typeVersion":1.5,"position":[980,360],"parameters":{"model":{"__rl":true,"mode":"list","value":"claude-sonnet-4-6","cachedResultName":"Claude Sonnet 4.6"},"options":{}},"credentials":{"anthropicApi":{"id":"xm5RKp4qI3NFTtbd","name":"Anthropic account"}}},{"id":"output_parser","name":"Structured Output Parser","type":"@n8n/n8n-nodes-langchain.outputParserStructured","typeVersion":1.3,"position":[1200,360],"parameters":{"schemaType":"manual","inputSchema":"{\n  \"type\": \"object\",\n  \"properties\": {\n    \"resumen\": {\n      \"type\": \"string\",\n      \"description\": \"Resumen de la noticia en español, 60-100 palabras, tono informativo, cercano y divulgativo\"\n    },\n    \"tono\": {\n      \"type\": \"string\",\n      \"description\": \"Etiqueta descriptiva del registro aplicado, para trazabilidad interna\"\n    },\n    \"prompt_imagen\": {\n      \"type\": \"string\",\n      \"description\": \"Prompt en inglés para el modelo de generación de imagen (Nano Banana), 30-60 palabras\"\n    }\n  },\n  \"required\": [\"resumen\", \"tono\", \"prompt_imagen\"]\n}"}},{"id":"http_gemini","name":"Nano Banana - Generar Imagen","type":"n8n-nodes-base.httpRequest","typeVersion":4.4,"position":[1260,120],"parameters":{"method":"POST","url":"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-image:generateContent","authentication":"genericCredentialType","genericAuthType":"httpHeaderAuth","sendBody":true,"contentType":"json","specifyBody":"json","jsonBody":"={{ JSON.stringify({ contents: [ { parts: [ { text: $json.output.prompt_imagen } ] } ] }) }}","options":{"batching":{"batch":{"batchSize":1,"batchInterval":3000}}}},"credentials":{"httpHeaderAuth":{"id":"geminiNanoBanana1","name":"Gemini (Nano Banana) account"}}},{"id":"code_decode_image","name":"Decodificar Imagen a Binario","type":"n8n-nodes-base.code","typeVersion":2,"position":[1500,120],"parameters":{"mode":"runOnceForEachItem","language":"javaScript","jsCode":"const response = $json;\nconst parts = (response.candidates && response.candidates[0] && response.candidates[0].content && response.candidates[0].content.parts) || [];\nconst imagePart = parts.find((p) => p.inlineData || p.inline_data);\nconst inline = imagePart ? (imagePart.inlineData || imagePart.inline_data) : undefined;\nif (!inline || !inline.data) {\n  throw new Error('Nano Banana no devolvio ninguna imagen en la respuesta: ' + JSON.stringify(response).slice(0, 500));\n}\nconst buffer = Buffer.from(inline.data, 'base64');\nconst mimeType = inline.mimeType || inline.mime_type || 'image/png';\nconst binary = await this.helpers.prepareBinaryData(buffer, 'noticia.png', mimeType);\nreturn { json: response, binary: { data: binary } };"}},{"id":"telegram_send","name":"Telegram - Enviar Foto","type":"n8n-nodes-base.telegram","typeVersion":1.2,"position":[1740,120],"retryOnFail":true,"maxTries":3,"waitBetweenTries":3000,"parameters":{"resource":"message","operation":"sendPhoto","chatId":"-5346073464","binaryData":true,"binaryPropertyName":"data","additionalFields":{"caption":"={{ $('AI Agent').item.json.output.resumen }}"}},"credentials":{"telegramApi":{"id":"izAUwR5Ijxitz6wW","name":"Telegram account"}}},{"id":"set_row_fields","name":"Preparar Fila del Log","type":"n8n-nodes-base.set","typeVersion":3.4,"position":[1980,120],"parameters":{"mode":"manual","assignments":{"assignments":[{"id":"a1","name":"link","value":"={{ $('RSS Feed Read').item.json.link }}","type":"string"},{"id":"a2","name":"titulo_original","value":"={{ $('RSS Feed Read').item.json.title }}","type":"string"},{"id":"a3","name":"fecha_publicacion","value":"={{ $('RSS Feed Read').item.json.isoDate || $('RSS Feed Read').item.json.pubDate }}","type":"string"},{"id":"a4","name":"fecha_captura","value":"={{ $now.toISO() }}","type":"string"},{"id":"a5","name":"resumen_generado","value":"={{ $('AI Agent').item.json.output.resumen }}","type":"string"},{"id":"a6","name":"tono_aplicado","value":"={{ $('AI Agent').item.json.output.tono }}","type":"string"},{"id":"a7","name":"prompt_imagen","value":"={{ $('AI Agent').item.json.output.prompt_imagen }}","type":"string"},{"id":"a8","name":"imagen","value":"","type":"string"},{"id":"a9","name":"estado","value":"enviado","type":"string"},{"id":"a10","name":"canal_destino","value":"Telegram","type":"string"}]},"options":{}}},{"id":"sheets_append","name":"Google Sheets - Anadir al Log","type":"n8n-nodes-base.googleSheets","typeVersion":4.7,"position":[2220,120],"parameters":{"authentication":"oAuth2","resource":"sheet","operation":"append","documentId":{"__rl":true,"mode":"id","value":"18h4I3BsqjcCKRxrsStSF8eHXw2xUN8aMc9Q2RucqKVs"},"sheetName":{"__rl":true,"mode":"id","value":"0"},"columns":{"mappingMode":"autoMapInputData","value":{}},"options":{}},"credentials":{"googleSheetsOAuth2Api":{"id":"gHAPDOZ8wvBZu0mg","name":"Google Sheets account"}}},{"id":"sticky_trigger","name":"Sticky - Disparo","type":"n8n-nodes-base.stickyNote","typeVersion":1,"position":[-260,-60],"parameters":{"width":400,"height":180,"content":"## Disparo\nDos entradas en paralelo hacia el mismo flujo:\n- **Schedule Trigger**: cron diario (08:00) para el caso de uso real.\n- **Manual Trigger**: para ejecutar bajo demanda en la demo/vídeo sin esperar al cron."}},{"id":"sticky_ingesta","name":"Sticky - Ingesta","type":"n8n-nodes-base.stickyNote","typeVersion":1,"position":[40,-60],"parameters":{"width":480,"height":220,"content":"## Ingesta\n**RSS Feed Read**: lee el feed de Xataka - Inteligencia Artificial (ya pre-filtrado por tema, no hace falta nodo Filter).\n\n**Limit a 6**: el RSS devuelve todos los items en cada ejecucion (~20); este nodo acota a un maximo de 6 candidatos por ejecucion (tope de seguridad ante un dia con mucha actividad), quedandose con los mas recientes."}},{"id":"sticky_dedup","name":"Sticky - Deduplicacion","type":"n8n-nodes-base.stickyNote","typeVersion":1,"position":[280,560],"parameters":{"width":560,"height":260,"content":"## Deduplicacion (soporta varios articulos nuevos por ejecucion)\n**Leer Log Completo**: lee TODAS las filas de la Google Sheet 'Log de Noticias' una sola vez por ejecucion (sin filtro), en paralelo a la ingesta del RSS.\n\n**Filtrar Noticias Nuevas**: Code node que cruza los hasta 6 candidatos del RSS contra los links ya existentes en el log y deja pasar solo los que aun no se han procesado -- sin gastar llamadas de pago (Claude, Nano Banana) en los que ya estan. Si los 6 ya estan procesados, no pasa ningun item y el flujo termina ahi de forma natural."}},{"id":"sticky_ia","name":"Sticky - Procesamiento IA","type":"n8n-nodes-base.stickyNote","typeVersion":1,"position":[960,-80],"parameters":{"width":460,"height":180,"content":"## Procesamiento IA\n**AI Agent** (Anthropic Chat Model + Structured Output Parser, 'Require Specific Output Format' activado): genera resumen, tono y prompt_imagen en un unico JSON estructurado, a partir del titular/fecha/enlace/contenido del articulo."}},{"id":"sticky_imagen","name":"Sticky - Generacion de imagen","type":"n8n-nodes-base.stickyNote","typeVersion":1,"position":[1250,-80],"parameters":{"width":460,"height":180,"content":"## Generacion de imagen\n**Nano Banana - Generar Imagen**: llama a la API de Gemini 2.5 Flash Image con el prompt_imagen generado.\n\n**Decodificar Imagen a Binario**: Gemini devuelve la imagen en base64 dentro del JSON; este Code node la convierte en un binario real de n8n para poder adjuntarla, no solo enlazarla."}},{"id":"sticky_salida","name":"Sticky - Salida y log","type":"n8n-nodes-base.stickyNote","typeVersion":1,"position":[1730,-80],"parameters":{"width":700,"height":180,"content":"## Salida y registro\n**Telegram - Enviar Foto**: envia la imagen generada como foto real (no enlace) al grupo dedicado, con el resumen como caption.\n\n**Preparar Fila del Log** + **Google Sheets - Anadir al Log**: tras el envio correcto, construye y anade la fila con las 10 columnas del log (link, titulo, fechas, resumen, tono, prompt_imagen, imagen, estado, canal_destino)."}}],"connections":{"Schedule Trigger":{"main":[[{"node":"RSS Feed Read","type":"main","index":0},{"node":"Leer Log Completo","type":"main","index":0}]]},"Manual Trigger":{"main":[[{"node":"RSS Feed Read","type":"main","index":0},{"node":"Leer Log Completo","type":"main","index":0}]]},"RSS Feed Read":{"main":[[{"node":"Limit a 6 (mas recientes)","type":"main","index":0}]]},"Limit a 6 (mas recientes)":{"main":[[{"node":"Filtrar Noticias Nuevas","type":"main","index":0}]]},"Leer Log Completo":{"main":[[{"node":"Filtrar Noticias Nuevas","type":"main","index":0}]]},"Filtrar Noticias Nuevas":{"main":[[{"node":"AI Agent","type":"main","index":0}]]},"Anthropic Chat Model":{"ai_languageModel":[[{"node":"AI Agent","type":"ai_languageModel","index":0}]]},"Structured Output Parser":{"ai_outputParser":[[{"node":"AI Agent","type":"ai_outputParser","index":0}]]},"AI Agent":{"main":[[{"node":"Nano Banana - Generar Imagen","type":"main","index":0}]]},"Nano Banana - Generar Imagen":{"main":[[{"node":"Decodificar Imagen a Binario","type":"main","index":0}]]},"Decodificar Imagen a Binario":{"main":[[{"node":"Telegram - Enviar Foto","type":"main","index":0}]]},"Telegram - Enviar Foto":{"main":[[{"node":"Preparar Fila del Log","type":"main","index":0}]]},"Preparar Fila del Log":{"main":[[{"node":"Google Sheets - Anadir al Log","type":"main","index":0}]]}},"settings":{"executionOrder":"v1","errorWorkflow":"newsReporterErrors1"},"staticData":{"node:Schedule Trigger":{"recurrenceRules":[null],"recurrenceRuleSignatures":[null]}},"meta":null,"nodeGroups":[],"pinData":{},"versionId":"9faf92e0-9d72-4cab-8e74-87ff8d454f4e","activeVersionId":"9faf92e0-9d72-4cab-8e74-87ff8d454f4e","versionCounter":8,"triggerCount":1,"sourceWorkflowId":null,"tags":[],"shared":[{"updatedAt":"2026-09-11T14:27:29.380Z","createdAt":"2026-09-11T14:27:29.380Z","role":"workflow:owner","workflowId":"newsReporterMain1","projectId":"iqGKKFIXCL7pQvoL","project":{"updatedAt":"2026-08-22T08:37:36.107Z","createdAt":"2026-08-18T18:01:14.240Z","id":"iqGKKFIXCL7pQvoL","name":"Jose Cesar Lopez Ziegler <josecziegler@gmail.com>","type":"personal","icon":null,"description":null,"customTelemetryTags":[],"creatorId":"b98bc458-51b3-45d3-80b6-cb5008d3d366"}}],"versionMetadata":{"name":null,"description":null}}]
+[
+  {
+    "updatedAt": "2026-09-11T16:29:08.000Z",
+    "createdAt": "2026-09-11T14:27:29.376Z",
+    "id": "newsReporterMain1",
+    "name": "News Reporter",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+      {
+        "id": "trigger_schedule",
+        "name": "Schedule Trigger",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.3,
+        "position": [
+          -200,
+          140
+        ],
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "days",
+                "triggerAtHour": 8,
+                "triggerAtMinute": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "trigger_manual",
+        "name": "Manual Trigger",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          -200,
+          420
+        ],
+        "parameters": {}
+      },
+      {
+        "id": "rss_read",
+        "name": "RSS Feed Read",
+        "type": "n8n-nodes-base.rssFeedRead",
+        "typeVersion": 1.2,
+        "position": [
+          60,
+          280
+        ],
+        "parameters": {
+          "url": "https://www.xataka.com/tag/inteligencia-artificial/rss2.xml"
+        }
+      },
+      {
+        "id": "limit_6",
+        "name": "Limit a 6 (mas recientes)",
+        "type": "n8n-nodes-base.limit",
+        "typeVersion": 1,
+        "position": [
+          300,
+          220
+        ],
+        "parameters": {
+          "maxItems": 6,
+          "keep": "firstItems"
+        }
+      },
+      {
+        "id": "sheets_get_all_log",
+        "name": "Leer Log Completo",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          300,
+          460
+        ],
+        "parameters": {
+          "authentication": "oAuth2",
+          "resource": "sheet",
+          "operation": "read",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "18h4I3BsqjcCKRxrsStSF8eHXw2xUN8aMc9Q2RucqKVs"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "id",
+            "value": "0"
+          },
+          "filtersUI": {},
+          "options": {}
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "gHAPDOZ8wvBZu0mg",
+            "name": "Google Sheets account"
+          }
+        }
+      },
+      {
+        "id": "code_filter_new",
+        "name": "Filtrar Noticias Nuevas",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          560,
+          280
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "language": "javaScript",
+          "jsCode": "const allItems = $input.all();\nconst logRows = allItems.filter((i) => Object.prototype.hasOwnProperty.call(i.json, 'estado'));\nconst candidates = allItems.filter((i) => !Object.prototype.hasOwnProperty.call(i.json, 'estado'));\nconst existingLinks = new Set(logRows.map((i) => i.json.link));\nreturn candidates.filter((i) => !existingLinks.has(i.json.link));"
+        }
+      },
+      {
+        "id": "ai_agent",
+        "name": "AI Agent",
+        "type": "@n8n/n8n-nodes-langchain.agent",
+        "typeVersion": 3.1,
+        "position": [
+          1020,
+          120
+        ],
+        "parameters": {
+          "promptType": "define",
+          "text": "=Titular: {{ $('RSS Feed Read').item.json.title }}\n\nFecha de publicación: {{ $('RSS Feed Read').item.json.pubDate }}\n\nEnlace original: {{ $('RSS Feed Read').item.json.link }}\n\nContenido:\n\n{{ $('RSS Feed Read').item.json.contentSnippet || $('RSS Feed Read').item.json.content }}",
+          "hasOutputParser": true,
+          "options": {
+            "systemMessage": "Eres el redactor de IA del equipo de contenidos de un medio digital español especializado en innovación, tecnología y negocios. Tu trabajo es convertir un artículo de prensa real en una pieza breve, lista para publicar en el canal de distribución interno del equipo.\n\nRecibirás el titular, la fecha de publicación, el enlace y el contenido (puede incluir HTML) de una noticia real. A partir de ese material, y solo de ese material, genera tres elementos:\n\n1. \"resumen\": un resumen de la noticia en español, entre 60 y 100 palabras, en 3-4 frases. Debe:\n\n   - Recoger los hechos y datos concretos del artículo original (cifras, nombres, fechas) sin inventar ni añadir información que no esté en el texto fuente.\n\n   - Tener un tono informativo, cercano y divulgativo: explica cualquier término técnico en cuanto aparece, evita la jerga innecesaria, usa un lenguaje directo, y una frase de apertura que enganche sin caer en el sensacionalismo o el titular clickbait.\n\n   - Ser una reescritura en tus propias palabras, nunca una copia ni una paráfrasis mecánica del texto original.\n\n2. \"tono\": una etiqueta corta (una frase) que describa el registro aplicado en el resumen — por ejemplo \"informativo, cercano y divulgativo\", o una variación si el contenido lo pide (más técnico si la noticia es muy especializada, siempre dentro de un registro accesible). Este campo es para trazabilidad interna, no forma parte del texto publicado.\n\n3. \"prompt_imagen\": un prompt en inglés, de entre 30 y 60 palabras, para un modelo de generación de imágenes (Nano Banana / Gemini 2.5 Flash Image), que describa una escena o composición ilustrativa relacionada con el contenido del resumen. Reglas:\n\n   - Describe una escena, objeto o metáfora visual concreta — no una lista de palabras sueltas.\n\n   - No incluyas texto, logotipos, marcas registradas, ni la reproducción de personas reales identificables (ni sus nombres) en la descripción.\n\n   - Especifica un estilo visual editorial (por ejemplo \"editorial illustration\", \"photorealistic tech photography\", \"flat design infographic style\" — elige el que mejor encaje con la noticia) y evita pedir texto superpuesto en la imagen, porque los modelos de imagen no lo renderizan bien.\n\nSi el contenido del artículo es muy breve o incompleto, genera el mejor resumen posible con la información disponible. Nunca inventes datos, cifras o declaraciones que no estén en el texto fuente.\n\nDevuelve EXCLUSIVAMENTE un objeto JSON válido con esta forma exacta, sin texto adicional antes o después, sin bloques de código markdown:\n\n{\n\n  \"resumen\": \"...\",\n\n  \"tono\": \"...\",\n\n  \"prompt_imagen\": \"...\"\n\n}"
+          }
+        }
+      },
+      {
+        "id": "anthropic_model",
+        "name": "Anthropic Chat Model",
+        "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+        "typeVersion": 1.5,
+        "position": [
+          980,
+          360
+        ],
+        "parameters": {
+          "model": {
+            "__rl": true,
+            "mode": "list",
+            "value": "claude-sonnet-4-6",
+            "cachedResultName": "Claude Sonnet 4.6"
+          },
+          "options": {}
+        },
+        "credentials": {
+          "anthropicApi": {
+            "id": "xm5RKp4qI3NFTtbd",
+            "name": "Anthropic account"
+          }
+        }
+      },
+      {
+        "id": "output_parser",
+        "name": "Structured Output Parser",
+        "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+        "typeVersion": 1.3,
+        "position": [
+          1200,
+          360
+        ],
+        "parameters": {
+          "schemaType": "manual",
+          "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"resumen\": {\n      \"type\": \"string\",\n      \"description\": \"Resumen de la noticia en español, 60-100 palabras, tono informativo, cercano y divulgativo\"\n    },\n    \"tono\": {\n      \"type\": \"string\",\n      \"description\": \"Etiqueta descriptiva del registro aplicado, para trazabilidad interna\"\n    },\n    \"prompt_imagen\": {\n      \"type\": \"string\",\n      \"description\": \"Prompt en inglés para el modelo de generación de imagen (Nano Banana), 30-60 palabras\"\n    }\n  },\n  \"required\": [\"resumen\", \"tono\", \"prompt_imagen\"]\n}"
+        }
+      },
+      {
+        "id": "http_gemini",
+        "name": "Nano Banana - Generar Imagen",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          1260,
+          120
+        ],
+        "parameters": {
+          "method": "POST",
+          "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-image:generateContent",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ contents: [ { parts: [ { text: $json.output.prompt_imagen } ] } ] }) }}",
+          "options": {
+            "batching": {
+              "batch": {
+                "batchSize": 1,
+                "batchInterval": 3000
+              }
+            }
+          }
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "geminiNanoBanana1",
+            "name": "Gemini (Nano Banana) account"
+          }
+        }
+      },
+      {
+        "id": "code_decode_image",
+        "name": "Decodificar Imagen a Binario",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1500,
+          120
+        ],
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "language": "javaScript",
+          "jsCode": "const response = $json;\nconst parts = (response.candidates && response.candidates[0] && response.candidates[0].content && response.candidates[0].content.parts) || [];\nconst imagePart = parts.find((p) => p.inlineData || p.inline_data);\nconst inline = imagePart ? (imagePart.inlineData || imagePart.inline_data) : undefined;\nif (!inline || !inline.data) {\n  throw new Error('Nano Banana no devolvio ninguna imagen en la respuesta: ' + JSON.stringify(response).slice(0, 500));\n}\nconst buffer = Buffer.from(inline.data, 'base64');\nconst mimeType = inline.mimeType || inline.mime_type || 'image/png';\nconst binary = await this.helpers.prepareBinaryData(buffer, 'noticia.png', mimeType);\nreturn { json: response, binary: { data: binary } };"
+        }
+      },
+      {
+        "id": "telegram_send",
+        "name": "Telegram - Enviar Foto",
+        "type": "n8n-nodes-base.telegram",
+        "typeVersion": 1.2,
+        "position": [
+          1740,
+          120
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 3000,
+        "parameters": {
+          "resource": "message",
+          "operation": "sendPhoto",
+          "chatId": "-5346073464",
+          "binaryData": true,
+          "binaryPropertyName": "data",
+          "additionalFields": {
+            "caption": "={{ $('AI Agent').item.json.output.resumen }}"
+          }
+        },
+        "credentials": {
+          "telegramApi": {
+            "id": "izAUwR5Ijxitz6wW",
+            "name": "Telegram account"
+          }
+        }
+      },
+      {
+        "id": "set_row_fields",
+        "name": "Preparar Fila del Log",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          1980,
+          120
+        ],
+        "parameters": {
+          "mode": "manual",
+          "assignments": {
+            "assignments": [
+              {
+                "id": "a1",
+                "name": "link",
+                "value": "={{ $('RSS Feed Read').item.json.link }}",
+                "type": "string"
+              },
+              {
+                "id": "a2",
+                "name": "titulo_original",
+                "value": "={{ $('RSS Feed Read').item.json.title }}",
+                "type": "string"
+              },
+              {
+                "id": "a3",
+                "name": "fecha_publicacion",
+                "value": "={{ $('RSS Feed Read').item.json.isoDate || $('RSS Feed Read').item.json.pubDate }}",
+                "type": "string"
+              },
+              {
+                "id": "a4",
+                "name": "fecha_captura",
+                "value": "={{ $now.toISO() }}",
+                "type": "string"
+              },
+              {
+                "id": "a5",
+                "name": "resumen_generado",
+                "value": "={{ $('AI Agent').item.json.output.resumen }}",
+                "type": "string"
+              },
+              {
+                "id": "a6",
+                "name": "tono_aplicado",
+                "value": "={{ $('AI Agent').item.json.output.tono }}",
+                "type": "string"
+              },
+              {
+                "id": "a7",
+                "name": "prompt_imagen",
+                "value": "={{ $('AI Agent').item.json.output.prompt_imagen }}",
+                "type": "string"
+              },
+              {
+                "id": "a8",
+                "name": "imagen",
+                "value": "",
+                "type": "string"
+              },
+              {
+                "id": "a9",
+                "name": "estado",
+                "value": "enviado",
+                "type": "string"
+              },
+              {
+                "id": "a10",
+                "name": "canal_destino",
+                "value": "Telegram",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "sheets_append",
+        "name": "Google Sheets - Anadir al Log",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          2220,
+          120
+        ],
+        "parameters": {
+          "authentication": "oAuth2",
+          "resource": "sheet",
+          "operation": "append",
+          "documentId": {
+            "__rl": true,
+            "mode": "id",
+            "value": "18h4I3BsqjcCKRxrsStSF8eHXw2xUN8aMc9Q2RucqKVs"
+          },
+          "sheetName": {
+            "__rl": true,
+            "mode": "id",
+            "value": "0"
+          },
+          "columns": {
+            "mappingMode": "autoMapInputData",
+            "value": {}
+          },
+          "options": {}
+        },
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "gHAPDOZ8wvBZu0mg",
+            "name": "Google Sheets account"
+          }
+        }
+      },
+      {
+        "id": "sticky_trigger",
+        "name": "Sticky - Disparo",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          -260,
+          -60
+        ],
+        "parameters": {
+          "width": 400,
+          "height": 180,
+          "content": "## Disparo\nDos entradas en paralelo hacia el mismo flujo:\n- **Schedule Trigger**: cron diario (08:00) para el caso de uso real.\n- **Manual Trigger**: para ejecutar bajo demanda en la demo/vídeo sin esperar al cron."
+        }
+      },
+      {
+        "id": "sticky_ingesta",
+        "name": "Sticky - Ingesta",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          40,
+          -60
+        ],
+        "parameters": {
+          "width": 480,
+          "height": 220,
+          "content": "## Ingesta\n**RSS Feed Read**: lee el feed de Xataka - Inteligencia Artificial (ya pre-filtrado por tema, no hace falta nodo Filter).\n\n**Limit a 6**: el RSS devuelve todos los items en cada ejecucion (~20); este nodo acota a un maximo de 6 candidatos por ejecucion (tope de seguridad ante un dia con mucha actividad), quedandose con los mas recientes."
+        }
+      },
+      {
+        "id": "sticky_dedup",
+        "name": "Sticky - Deduplicacion",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          280,
+          560
+        ],
+        "parameters": {
+          "width": 560,
+          "height": 260,
+          "content": "## Deduplicacion (soporta varios articulos nuevos por ejecucion)\n**Leer Log Completo**: lee TODAS las filas de la Google Sheet 'Log de Noticias' una sola vez por ejecucion (sin filtro), en paralelo a la ingesta del RSS.\n\n**Filtrar Noticias Nuevas**: Code node que cruza los hasta 6 candidatos del RSS contra los links ya existentes en el log y deja pasar solo los que aun no se han procesado -- sin gastar llamadas de pago (Claude, Nano Banana) en los que ya estan. Si los 6 ya estan procesados, no pasa ningun item y el flujo termina ahi de forma natural."
+        }
+      },
+      {
+        "id": "sticky_ia",
+        "name": "Sticky - Procesamiento IA",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          960,
+          -80
+        ],
+        "parameters": {
+          "width": 460,
+          "height": 180,
+          "content": "## Procesamiento IA\n**AI Agent** (Anthropic Chat Model + Structured Output Parser, 'Require Specific Output Format' activado): genera resumen, tono y prompt_imagen en un unico JSON estructurado, a partir del titular/fecha/enlace/contenido del articulo."
+        }
+      },
+      {
+        "id": "sticky_imagen",
+        "name": "Sticky - Generacion de imagen",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          1250,
+          -80
+        ],
+        "parameters": {
+          "width": 460,
+          "height": 180,
+          "content": "## Generacion de imagen\n**Nano Banana - Generar Imagen**: llama a la API de Gemini 2.5 Flash Image con el prompt_imagen generado.\n\n**Decodificar Imagen a Binario**: Gemini devuelve la imagen en base64 dentro del JSON; este Code node la convierte en un binario real de n8n para poder adjuntarla, no solo enlazarla."
+        }
+      },
+      {
+        "id": "sticky_salida",
+        "name": "Sticky - Salida y log",
+        "type": "n8n-nodes-base.stickyNote",
+        "typeVersion": 1,
+        "position": [
+          1730,
+          -80
+        ],
+        "parameters": {
+          "width": 700,
+          "height": 180,
+          "content": "## Salida y registro\n**Telegram - Enviar Foto**: envia la imagen generada como foto real (no enlace) al grupo dedicado, con el resumen como caption.\n\n**Preparar Fila del Log** + **Google Sheets - Anadir al Log**: tras el envio correcto, construye y anade la fila con las 10 columnas del log (link, titulo, fechas, resumen, tono, prompt_imagen, imagen, estado, canal_destino)."
+        }
+      }
+    ],
+    "connections": {
+      "Schedule Trigger": {
+        "main": [
+          [
+            {
+              "node": "RSS Feed Read",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Leer Log Completo",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Manual Trigger": {
+        "main": [
+          [
+            {
+              "node": "RSS Feed Read",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Leer Log Completo",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "RSS Feed Read": {
+        "main": [
+          [
+            {
+              "node": "Limit a 6 (mas recientes)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Limit a 6 (mas recientes)": {
+        "main": [
+          [
+            {
+              "node": "Filtrar Noticias Nuevas",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Leer Log Completo": {
+        "main": [
+          [
+            {
+              "node": "Filtrar Noticias Nuevas",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Filtrar Noticias Nuevas": {
+        "main": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Anthropic Chat Model": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Structured Output Parser": {
+        "ai_outputParser": [
+          [
+            {
+              "node": "AI Agent",
+              "type": "ai_outputParser",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI Agent": {
+        "main": [
+          [
+            {
+              "node": "Nano Banana - Generar Imagen",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Nano Banana - Generar Imagen": {
+        "main": [
+          [
+            {
+              "node": "Decodificar Imagen a Binario",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Decodificar Imagen a Binario": {
+        "main": [
+          [
+            {
+              "node": "Telegram - Enviar Foto",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Telegram - Enviar Foto": {
+        "main": [
+          [
+            {
+              "node": "Preparar Fila del Log",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Preparar Fila del Log": {
+        "main": [
+          [
+            {
+              "node": "Google Sheets - Anadir al Log",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "errorWorkflow": "newsReporterErrors1"
+    },
+    "staticData": {
+      "node:Schedule Trigger": {
+        "recurrenceRules": [
+          null
+        ],
+        "recurrenceRuleSignatures": [
+          null
+        ]
+      }
+    },
+    "meta": null,
+    "nodeGroups": [],
+    "pinData": {},
+    "versionId": "9faf92e0-9d72-4cab-8e74-87ff8d454f4e",
+    "activeVersionId": "9faf92e0-9d72-4cab-8e74-87ff8d454f4e",
+    "versionCounter": 8,
+    "triggerCount": 1,
+    "sourceWorkflowId": null,
+    "tags": [],
+    "shared": [
+      {
+        "updatedAt": "2026-09-11T14:27:29.380Z",
+        "createdAt": "2026-09-11T14:27:29.380Z",
+        "role": "workflow:owner",
+        "workflowId": "newsReporterMain1",
+        "projectId": "iqGKKFIXCL7pQvoL",
+        "project": {
+          "updatedAt": "2026-08-22T08:37:36.107Z",
+          "createdAt": "2026-08-18T18:01:14.240Z",
+          "id": "iqGKKFIXCL7pQvoL",
+          "name": "Jose Cesar Lopez Ziegler <josecziegler@gmail.com>",
+          "type": "personal",
+          "icon": null,
+          "description": null,
+          "customTelemetryTags": [],
+          "creatorId": "b98bc458-51b3-45d3-80b6-cb5008d3d366"
+        }
+      }
+    ],
+    "versionMetadata": {
+      "name": null,
+      "description": null
+    }
+  }
+]
