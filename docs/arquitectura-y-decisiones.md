@@ -1,6 +1,6 @@
 # Stack tecnológico — Agente "News Reporter"
 
-Propuesta de stack para el caso práctico del máster (EBIS), adaptada al entorno de Jose: n8n autoalojado en Docker (n8n.cesscluv.com vía túnel de Cloudflare), contenedor Ollama con qwen2.5:7b, y GitHub como repositorio del entregable.
+Propuesta de stack para el caso práctico del máster (EBIS), adaptada al entorno de Jose: n8n autoalojado en Docker (n8n.cesscluv.com vía túnel de Cloudflare), contenedor Ollama con qwen2.5:7b, y GitHub como repositorio del entregable. Ollama ha sido reemplazado en esta solución por soluciones IA en Cloud.
 
 ## 1. Arquitectura general
 
@@ -13,7 +13,7 @@ flowchart LR
 
     subgraph Ingesta
         B[RSS Feed Read\nXataka — Inteligencia Artificial]
-        B2[Limit: 1 ítem\nel más reciente]
+        B2[Limit: 6 ítems\nmás recientes]
     end
 
     subgraph "Procesamiento IA"
@@ -30,7 +30,7 @@ flowchart LR
     end
 
     subgraph "Deduplicación y log"
-        G1[Google Sheets\nGet Row(s): filtrar por link]
+        G1["Google Sheets\nGet Row(s): filtrar por link"]
         G2{¿Ya está\nen el log?}
         G3[Google Sheets\nAppend Row]
     end
@@ -57,7 +57,7 @@ flowchart LR
 
 Todo el flujo vive en la instancia n8n ya montada; GitHub no ejecuta nada, es el repositorio donde se versiona el blueprint y la documentación del entregable.
 
-**Actualización tras la puesta en producción — soporte para varios artículos nuevos por ejecución:** el diagrama de arriba y el diseño inicial asumían un único artículo por ejecución ("Limit: 1 ítem, el más reciente" + un Get Row(s)/IF por artículo). En el uso real, con un disparo diario, es habitual que se publique más de un artículo nuevo entre una ejecución y la siguiente — con el diseño de 1 ítem, los artículos adicionales se perdían en silencio (nunca se procesaban ni se registraban). El diseño final soporta varios artículos nuevos por ejecución:
+**Actualización tras la puesta en producción — soporte para varios artículos nuevos por ejecución:** el diseño inicial asumía un único artículo por ejecución ("Limit: 1 ítem, el más reciente" + un Get Row(s)/IF por artículo). En el uso real, con un disparo diario, es habitual que se publique más de un artículo nuevo entre una ejecución y la siguiente — con el diseño de 1 ítem, los artículos adicionales se perdían sin registro. El diseño final soporta varios artículos nuevos (máximo 6) por ejecución:
 
 - **Limit** se sube a un tope de seguridad de **6** artículos por ejecución (en vez de 1), para acotar el gasto en un día con mucha actividad sin limitarse a procesar solo el más reciente.
 - La deduplicación por artículo individual (Get Row(s) + IF) se sustituye por **Leer Log Completo** (lee toda la hoja una vez, en paralelo al RSS) + **Filtrar Noticias Nuevas** (un Code node que cruza en bloque los candidatos contra los links ya registrados). El patrón anterior funcionaba con 1 candidato, pero con varios en paralelo perdía silenciosamente los que no coincidían con el log — de ahí el cambio.
@@ -71,7 +71,7 @@ La instancia ya corre en Docker con volumen persistente y expuesta vía Cloudfla
 
 ### Disparador: Schedule Trigger + Manual Trigger en paralelo
 
-El caso pide "un disparador" (uno de tres). Se montan **dos** entradas al mismo flujo — Schedule Trigger (p. ej. cada mañana) para el caso de uso real, y Manual Trigger para poder ejecutar bajo demanda en el vídeo de la entrega sin esperar al cron. Es una decisión de diseño fácil de justificar en la explicación escrita.
+El caso pide "un disparador". Se montan **dos** entradas al mismo flujo — Schedule Trigger (p. ej. cada mañana) para el caso de uso real, y Manual Trigger para poder ejecutar bajo demanda en el vídeo de la entrega sin esperar al cron. 
 
 ### Fuente de noticias: RSS
 
@@ -81,7 +81,7 @@ URL del feed: https://www.xataka.com/tag/inteligencia-artificial/rss2.xml
 
 Verificado en vivo antes de cerrar la decisión: feed RSS 2.0 válido, publicando activamente contenido exclusivamente de IA. Ventaja clave frente a un feed general (El País Tecnología, Xataka general, Genbeta): **ya viene pre-filtrado por tema**, así que no hace falta un nodo Filter adicional para descartar noticias fuera de foco — encaja directamente con el "innovación, tecnología y negocios" que pide el enunciado, y además es temáticamente coherente (un agente de IA que reporta sobre noticias de IA).
 
-Como el nodo RSS Feed Read devuelve **todos** los ítems del feed en cada ejecución (no solo los nuevos), justo después va un nodo **Limit** a 1 ítem para quedarte con el más reciente — si no, cada ejecución del flujo generaría un resumen + imagen por cada una de las ~20 noticias del feed en vez de una sola pieza.
+Como el nodo RSS Feed Read devuelve **todos** los ítems del feed en cada ejecución (no solo los nuevos), justo después va un nodo **Limit** a 6 ítems para quedarte con los más recientes.
 
 Sin API key, sin autenticación — el nodo solo necesita la URL, lo que reduce puntos de fallo de cara a la demo.
 
@@ -100,18 +100,18 @@ Alternativa sin facturación: Ollama local (qwen2.5:7b) vía el nodo Ollama Chat
 
 **Decisión confirmada: Nano Banana 2 Lite (`gemini-3.1-flash-lite-image`)**, vía HTTP Request a la API de Google (no hay nodo nativo en n8n, así que se monta como HTTP Request con la API key de Google AI Studio como credencial Header Auth). El modelo original, `gemini-2.5-flash-image`, pasó a estado legacy — Google recomienda migrar a esta versión, más rápida y barata.
 
-**Corrección sobre el nivel gratuito (verificado en producción):** al construir el flujo, la llamada real a la API devolvía sistemáticamente `429 RESOURCE_EXHAUSTED` con `limit: 0` para el modelo de generación de imagen, en ambos modelos probados — es decir, la cuota gratuita para *generar imágenes* con Gemini es 0 en un proyecto sin facturación vinculada, a diferencia de lo que sugiere la documentación general de AI Studio (pensada sobre todo para los modelos de texto). La solución fue activar la facturación en el proyecto de Google Cloud asociado a la API key ("n8n-connection"); a partir de ahí las llamadas funcionan con normalidad. Coste real: ~0,039 $/imagen (la mitad vía Batch API) — para este proyecto, un puñado de céntimos.
+**Corrección sobre el nivel gratuito (verificado en producción):** al construir el flujo, la llamada real a la API devolvía sistemáticamente `429 RESOURCE_EXHAUSTED` con `limit: 0` para el modelo de generación de imagen, en ambos modelos probados — es decir, la cuota gratuita para *generar imágenes* con Gemini es 0 en un proyecto sin facturación vinculada, a diferencia de lo que sugiere la documentación general de AI Studio (pensada sobre todo para los modelos de texto). La solución fue activar la facturación en el proyecto de Google Cloud asociado a la API key ("n8n-connection"); a partir de ahí las llamadas funcionan con normalidad. Coste real: ~0,039 $/imagen (la mitad vía Batch API) — para este proyecto, unos pocos céntimos.
 
-Importante: descarga la imagen generada dentro del flujo (el nodo HTTP Request debe traer el binario, no solo la URL/base64 en crudo) para reenviarla como adjunto real a Telegram, no como un enlace. Gemini devuelve la imagen como base64 dentro de la respuesta JSON, así que un paso posterior decodifica ese base64 a un binario real de n8n antes de enviarlo a Telegram.
+Importante: se descarga la imagen generada dentro del flujo (el nodo HTTP Request trae el binario, no solo la URL/base64 en crudo) para reenviarla como adjunto real a Telegram, no como un enlace. Gemini devuelve la imagen como base64 dentro de la respuesta JSON, así que un paso posterior decodifica ese base64 a un binario real de n8n antes de enviarlo a Telegram.
 
 ### Canal de salida
 
 **Decisión confirmada: Telegram, con cuenta personal.**
 
-Es válido para la entrega — el enunciado pide "un canal de salida" de forma genérica (Slack/Discord/Email/Telegram), no exige que sea una cuenta corporativa, y el propio caso práctico es una simulación individual del proceso de un equipo editorial.
+El enunciado pide "un canal de salida" de forma genérica (Slack/Discord/Email/Telegram), no exige que sea una cuenta corporativa, y el propio caso práctico es una simulación individual del proceso de un equipo editorial.
 
-- **No se envía el resultado a un chat personal (DM).** Se creó un **bot dedicado** con BotFather y un **grupo de Telegram** propio donde se añadió ese bot, simulando el canal de distribución de un equipo editorial.
-- Nota para la explicación escrita: "se eligió Telegram por rapidez de configuración y fiabilidad para una demo individual; en un entorno real de equipo sería Slack, con el mismo patrón de nodo de salida."
+- **No se envía el resultado a un chat personal (DM).** Se creó un **bot dedicado** con BotFather y un **grupo de Telegram** propio (Agencia de Noticias IA) donde se añadió ese bot, simulando el canal de distribución de un equipo editorial.
+- Nota: "se eligió Telegram por rapidez de configuración y fiabilidad para una demo individual; en un entorno real de equipo sería Slack, con el mismo patrón de nodo de salida."
 - Técnicamente: nodo Telegram nativo de n8n, credencial = token del bot (BotFather), envío de imagen + caption en una sola llamada (sendPhoto con caption).
 
 **Chat ID del grupo ya resuelto:** -5346073464 (ver valores de configuración en la sección 8).
